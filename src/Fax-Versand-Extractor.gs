@@ -481,8 +481,20 @@ const FaxVersandExtraktor = (function () {
       'Ausschluss über Fax-Nummern (' + SOURCE_FILTER_EXCLUDING_FAX_NUMBERS + ')' +
         kennzeichen(SOURCE_FILTER_EXCLUDING_FAX_NUMBERS) + ': ' +
         EXCLUDED_FAX_NSN.length + ' Nummern, ' + EXCLUDED_RECIPIENTS.length + ' Adressen',
-      '  ' + EXCLUDED_RECIPIENTS.join(', ')
+      '  ' + EXCLUDED_FAX_NSN.join(', '),
+      '  Legende: je Nummer ‹NSN› gelten ' + beispielAdressen_()
     ];
+  }
+
+  /**
+   * Die drei Adressformen als Muster, aus derselben Funktion gebildet wie
+   * die Adressen selbst – Legende und Wirklichkeit können nicht
+   * auseinanderlaufen.
+   */
+  function beispielAdressen_() {
+    return kodierungen_('‹NSN›').map(function (kodierung) {
+      return kodierung + '@' + FAX_DOMAIN;
+    }).join(', ');
   }
 
   function logSessionStart_(config, session) {
