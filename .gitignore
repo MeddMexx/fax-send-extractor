@@ -1,0 +1,11 @@
+# clasp-Zugangsdaten – niemals einchecken
+.clasprc.json
+
+# Betriebssystem
+.DS_Store
+Thumbs.db
+
+# Editoren
+.idea/
+.vscode/
+*.swp
