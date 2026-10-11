@@ -168,7 +168,8 @@ const FaxVersandExtraktor = (function () {
   const SOURCE_FILTERED_BY = SOURCE_FILTER_INCLUDING_EMAIL_LABEL;
 
   // Nur beim Einschluss wirksam: genau ein Label, nicht mehrere.
-  const INCLUDED_EMAIL_LABEL = 'channels-to-be-exported';
+  // Gmail führt verschachtelte Label als Pfad: Oberlabel/Unterlabel.
+  const INCLUDED_EMAIL_LABEL = 'channels/to-be-exported';
 
   // Exportkennung: unterscheidet Ordner, Archive und Protokolldatei von der
   // Geschwisterfassung. Sie trägt den Quellfilter NICHT – dagegen schützt

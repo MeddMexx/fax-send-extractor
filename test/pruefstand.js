@@ -89,7 +89,7 @@ function lade(opt) {
       Labels: {
         list: () => ({
           labels: opt.labels !== undefined ? opt.labels
-            : [{ id: 'Label_7', name: 'channels-to-be-exported' }]
+            : [{ id: 'Label_7', name: 'channels/to-be-exported' }]
         })
       },
       Messages: {
