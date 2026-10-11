@@ -4,7 +4,7 @@ Google Apps Script. Extrahiert den jeweils einen PDF-Anhang der ausgehenden
 Faxe des Postfachinhabers an `*@simple-fax.de` und legt sie als ZIP-Teile in
 einem Google-Drive-Ordner ab.
 
-Stand: 2026-10-11 10:00:30 UTC (12:00:30 MESZ)
+Stand: 2026-10-11 10:45:00 UTC (12:45:00 MESZ)
 
 ## Gegenstand
 
@@ -41,18 +41,50 @@ Sämtliche Einstellungen stehen im Konfigurationsblock des Namensraums.
 
 | Konstante           | Bedeutung                                                       |
 |---------------------|-----------------------------------------------------------------|
-| `EXPORT_NAME`       | trägt Ordner-, Archiv- und Protokolldateinamen; einziger Ort der Unterscheidung von der Geschwisterfassung |
+| `SOURCE_FILTERED_BY` | Quellfilter: `'email-label'` (eingestellt, Einschluss) oder `'fax-numbers'` (Ausschluss) |
+| `INCLUDED_EMAIL_LABEL` | E-Mail-Label des Einschlusses; genau eines           |
+| `EXCLUDED_FAX_NSN`  | **Blacklist** der ausgeschlossenen Fax-Nummern, national, ohne Verkehrsausscheidungsziffer |
+| `EXPORT_NAME`       | trägt Ordner-, Archiv- und Protokolldateinamen; unterscheidet von der Geschwisterfassung, nicht die Quellfilter |
 | `MAILBOX`           | Konto, unter dem der Lauf allein zulässig ist; sonst Abbruch      |
 | `FAX_DOMAIN`        | Empfängerdomäne des Fax-Gateways                                  |
 | `FROM_DATE`         | Beginn des Zeitraums                                              |
 | `FAX_CC`            | Länderkennzahl; gilt für alle Nummern der Liste                   |
-| `FAX_NSN_LISTE`     | ausgenommene Zielnummern, national, ohne Verkehrsausscheidungsziffer |
 | `MAX_RESULTS`       | 0 = alle; für Probeläufe etwa 5                                   |
 | `TIME_BUDGET_MS`    | Laufzeitbudget je Ausführung                                      |
 | `SIZE_BUDGET_BYTES` | Größenbudget je Teil-ZIP                                          |
 
 Die drei Kodierungen je Nummer (`0…`, `0049…`, `+49…`) erzeugt
 `kodierungen_`; daraus entsteht `EXCLUDED_RECIPIENTS`.
+
+## Quellfilter
+
+Zwei Verfahren, umschaltbar über eine Konstante:
+
+- **Einschluss über das E-Mail-Label** (eingestellt). Exportiert werden nur
+  Mails, die `INCLUDED_EMAIL_LABEL` tragen. Das Label greift über den
+  Parameter `labelIds` der Gmail-API, nicht über den Suchtext — exakt und je
+  Nachricht statt je Konversation. Fehlt das Label im Postfach, bricht der
+  Lauf ab. `EXCLUDED_FAX_NSN` ruht.
+- **Ausschluss über Fax-Nummern.** Exportiert wird alles an die Fax-Domäne
+  außer an die Nummern in `EXCLUDED_FAX_NSN`. Die Liste ist eine Blacklist:
+  Wer dort einträgt, nimmt den Kanal vom Export aus.
+
+Der Domänenfilter gilt in beiden Verfahren. Die Exportkennung trägt den
+Quellfilter nicht; gegen einen Wechsel bei laufendem Zwischenstand schützt
+das Feld `sourceFilteredBy` der Protokolldatei. Bericht und README jedes
+Teils weisen stets beide Einstellungen aus, die wirksame gekennzeichnet.
+
+## Teile
+
+ZIP und README tragen den zweistelligen Index ihres Teils mit Vornull:
+
+    2026-06-12_export_09-15-30_faxversand.01.zip
+      README.01.txt
+
+Ab Teil 100 bricht der Lauf ab, statt den Index wachsen zu lassen — eine
+dritte Stelle stellte `README.100.txt` in jeder alphabetischen Liste vor
+`README.11.txt`. Die Protokolldatei trägt keinen Index; je Lauf gibt es nur
+eine.
 
 ## Filterung
 
@@ -75,9 +107,11 @@ Ein vollständiger Lauf ist am 3. Oktober 2026 durchgelaufen. Die Trefferzahl
 des Skripts stimmte mit derselben Suche in der Gmail-Oberfläche überein
 (867 Treffer).
 
-Automatisierte Tests existieren nicht. Die prüfbaren Funktionen liegen im
-Namensraum und sind von außen nicht erreichbar; sie zu testen setzte voraus,
-den Namensraum für sie zu öffnen.
+Automatisierte Tests sind nicht Teil des Repositorys. Der Quellfilter wurde
+vor der Auslieferung auf einem Prüfstand außerhalb gefahren: Attrappen für
+Gmail, Drive, Utilities und Session, vollständige Läufe in beiden Verfahren,
+fehlendes Label, fremder Zwischenstand, Indexgrenze, Empfängerzerlegung.
+Gegen das echte Postfach ist der Quellfilter noch nicht gelaufen.
 
 ## Offene Punkte
 
@@ -85,8 +119,6 @@ den Namensraum für sie zu öffnen.
   damit ist der Reviewprozess nach DEV-05 nicht vollständig ausführbar.
 - Alle Nummern der Ausschlussliste teilen `FAX_CC`. Eine ausländische
   Zielnummer trüge die vorhandene Struktur nicht.
-- `23021844955` steht in `FAX_NSN_LISTE` doppelt. Ohne Wirkung, vermutlich
-  ungewollt.
 - `7112063142540` und `7112063148109` tragen 13 Stellen, alle übrigen 9 bis 11.
   Ungeprüft, ob dort eine Durchwahl oder eine Verkehrsausscheidungsziffer
   hineingeraten ist.

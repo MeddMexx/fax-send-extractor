@@ -59,26 +59,36 @@
  * Aufgabe:
  *   Den jeweils einen PDF-Anhang der Mails des Postfachinhabers an
  *   *@simple-fax.de extrahieren. Welche Mails das sind, bestimmt die
- *   Konstante AUSWAHL:
+ *   Konstante SOURCE_FILTERED_BY:
  *
- *     'nummernliste'  Ausschlussverfahren: alle Mails an die Fax-Domäne
- *                     AUSSER an die in FAX_NSN_LISTE geführten
- *                     Zielnummern, jede in ihren drei Kodierungen.
- *     'label'         Einschlussverfahren: nur Mails, die das Gmail-Label
- *                     EXPORT_LABEL tragen. FAX_NSN_LISTE bleibt dabei
- *                     außer Betracht.
+ *     'email-label'   Einschluss: nur Mails, die das E-Mail-Label
+ *                     INCLUDED_EMAIL_LABEL tragen. EXCLUDED_FAX_NSN
+ *                     bleibt dabei außer Betracht. Eingestellt.
+ *     'fax-numbers'   Ausschluss: alle Mails an die Fax-Domäne AUSSER an
+ *                     die in EXCLUDED_FAX_NSN geführten Nummern, jede in
+ *                     ihren drei Kodierungen. EXCLUDED_FAX_NSN ist eine
+ *                     Blacklist.
  *
  *   Das Label greift nicht über den Suchtext, sondern über den Parameter
  *   labelIds der Gmail-API („Only return messages with labels that match
  *   all of the specified label IDs"). Das ist exakt, wirkt je Nachricht
  *   statt je Konversation und umgeht die Tokenisierung der Suche. Fehlt
  *   das Label im Postfach, bricht der Lauf ab, statt lautlos null Treffer
- *   zu melden.
+ *   zu melden. Genau ein Label, nicht mehrere.
  *
- *   AUSWAHL trägt die Exportkennung mit und damit Ordner-, Archiv- und
- *   Protokolldateinamen. Beide Verfahren haben so getrennte
- *   Zwischenstände; ein Wechsel kann den Wiederanlauf des anderen
- *   Verfahrens nicht aufnehmen.
+ *   Der Domänenfilter to:<FAX_DOMAIN> gilt in beiden Verfahren. Ohne ihn
+ *   träfe das Label auch Nicht-Fax-Mails, die die Ausschlussregel unten
+ *   ohnehin wieder aussortiert.
+ *
+ *   Die Exportkennung trägt den Quellfilter NICHT; Ordner- und
+ *   Archivnamen sind in beiden Verfahren dieselben. Gegen einen Wechsel
+ *   bei laufendem Zwischenstand schützt stattdessen das Feld
+ *   sourceFilteredBy der Protokolldatei: Weicht es ab, bricht der Lauf
+ *   ab (assertQuellfilterUnveraendert_).
+ *
+ *   Bericht und README weisen stets BEIDE Einstellungen aus, die
+ *   wirksame gekennzeichnet – aus dem Ergebnis allein wäre sonst nicht
+ *   ablesbar, welches Verfahren es erzeugt hat.
  *
  * Ausschlussregeln (exaktes Sicherheitsnetz im Code):
  *   - Entwurf (nie versandt)
@@ -86,17 +96,20 @@
  *   - mindestens ein Empfänger außerhalb der Fax-Domäne
  *     (fängt zugleich die testhalber an das eigene Postfach
  *     gerichteten Nachrichten ab)
- *   - mindestens ein Empfänger ist eine ausgenommene Zielnummer-Adresse
- *     (nur bei AUSWAHL = 'nummernliste')
+ *   - mindestens ein Empfänger ist eine ausgeschlossene Fax-Nummer
+ *     (nur bei SOURCE_FILTERED_BY = 'fax-numbers')
  *
  * Archive:
- *   Die ZIP-Dateien heißen z. B.:
- *     2026-06-12_export_09-15-30_faxversand_teil_1.zip
+ *   Die ZIP-Dateien tragen den zweistelligen Index ihres Teils:
+ *     2026-06-12_export_09-15-30_faxversand.01.zip
+ *   und führen das README desselben Index:
+ *     README.01.txt
+ *   Ab Teil 100 bricht der Lauf ab, statt den Index wachsen zu lassen.
  *   Alle Dateien landen in einem automatisch erzeugten Ordner:
  *     faxversand-extractor-dump_2026-06-12_09-15-30
- *   Die Protokolldatei heißt entsprechend:
+ *   Die Protokolldatei trägt keinen Index – je Lauf gibt es nur eine:
  *     2026-06-12_export_09-15-30_faxversand_protokoll.json
- *   Bei Laufzeiten über 5 Minuten oder ZIP-Größen über 50 MB wird das
+ *   Bei Laufzeiten über 5 Minuten oder ZIP-Größen über dem Budget wird das
  *   Skript automatisch angehalten. Einfach erneut „Ausführen" klicken –
  *   das Skript setzt dort fort, wo es aufgehört hat, und erzeugt den
  *   nächsten Teil.
@@ -108,7 +121,7 @@
  *   aktuellen Teil.
  *
  * Protokolldatei:
- *   Trägt den gleichen Namen wie die Archive, mit Endung _fax_protokoll.json.
+ *   Trägt den Archivstamm mit der Endung _protokoll.json.
  *   Liegt im selben Ordner wie die Archive.
  *   Solange diese Datei in Google Drive existiert, setzt das Skript fort.
  *   Protokolldatei löschen = Neustart beim nächsten Ausführen.
@@ -146,28 +159,31 @@ const FaxVersandExtraktor = (function () {
 
   // ──── Konfiguration: Anwendungsfall Fax ────
 
-  // Auswahlverfahren. Vorgabe ist das Label.
-  const AUSWAHL_LABEL = 'label';
-  const AUSWAHL_NUMMERNLISTE = 'nummernliste';
-  const AUSWAHL = AUSWAHL_LABEL;
+  // Quellfilter: wonach der Eingang ausgewählt wird. Beide Namen tragen
+  // Gegenstand und Richtung, weil der Name sonst den Irrtum zulässt, die
+  // Fax-Nummern seien eine Einschlussliste.
+  const SOURCE_FILTER_INCLUDING_EMAIL_LABEL = 'email-label';
+  const SOURCE_FILTER_EXCLUDING_FAX_NUMBERS = 'fax-numbers';
 
-  // Gmail-Label des Einschlussverfahrens. Nur bei AUSWAHL = 'label' wirksam.
-  const EXPORT_LABEL = 'channels-to-be-exported';
+  const SOURCE_FILTERED_BY = SOURCE_FILTER_INCLUDING_EMAIL_LABEL;
+
+  // Nur beim Einschluss wirksam: genau ein Label, nicht mehrere.
+  const INCLUDED_EMAIL_LABEL = 'channels-to-be-exported';
 
   // Exportkennung: unterscheidet Ordner, Archive und Protokolldatei von der
-  // Geschwisterfassung und die beiden Auswahlverfahren voneinander. Einziger
-  // Ort, an dem beide Trennungen festgelegt werden.
-  const EXPORT_NAME_BASIS = 'faxversand';
-  const EXPORT_NAME = EXPORT_NAME_BASIS + '-' + AUSWAHL;
+  // Geschwisterfassung. Sie trägt den Quellfilter NICHT – dagegen schützt
+  // der Eintrag sourceFilteredBy in der Protokolldatei.
+  const EXPORT_NAME = 'faxversand';
 
   const MAILBOX = 'fax.per.epost@gmail.com';      // Zusicherung: Lauf nur unter diesem Konto
   const FAX_DOMAIN = 'simple-fax.de';             // Empfängerdomäne des Fax-Gateways
   const FROM_DATE = '2004-01-01';                 // vor Gmail-Start = gesamter Bestand
 
-  // Ausgenommene Zielnummern: je Nummer ein Kern, drei Kodierungen (DRY) –
-  // können nicht auseinanderlaufen. Alle Nummern teilen FAX_CC.
+  // AUSGESCHLOSSENE Zielnummern – eine Blacklist. Wer hier einträgt,
+  // nimmt den Kanal vom Export aus. Je Nummer ein Kern, drei Kodierungen
+  // (DRY); alle Nummern teilen FAX_CC. Nur beim Ausschluss wirksam.
   const FAX_CC = '49';                 // Länderkennzahl
-  const FAX_NSN_LISTE = [              // nationale Nummern ohne Verkehrsausscheidungsziffer
+  const EXCLUDED_FAX_NSN = [           // nationale Nummern ohne Verkehrsausscheidungsziffer
     '23021844955',
     '70717573190',
     '75412048809',
@@ -199,7 +215,7 @@ const FaxVersandExtraktor = (function () {
   }
 
   // Die ausgenommenen Empfängeradressen – einzige Quelle für die Ausschlussprüfung.
-  const EXCLUDED_RECIPIENTS = FAX_NSN_LISTE.reduce(function (adressen, nsn) {
+  const EXCLUDED_RECIPIENTS = EXCLUDED_FAX_NSN.reduce(function (adressen, nsn) {
     return adressen.concat(kodierungen_(nsn).map(function (kodierung) {
       return (kodierung + '@' + FAX_DOMAIN).toLowerCase();
     }));
@@ -218,21 +234,38 @@ const FaxVersandExtraktor = (function () {
   // ──── Ablaufsteuerung ────
 
   function ausfuehren() {
-    assertAuswahl_(AUSWAHL);
+    assertQuellfilterZulaessig_(SOURCE_FILTERED_BY);
 
     exportFaxPdfs_({
       exportName: EXPORT_NAME,
       searchQuery: 'from:me to:' + FAX_DOMAIN,
       fromDate: FROM_DATE,
-      labelIds: AUSWAHL === AUSWAHL_LABEL ? [ermittleLabelId_(EXPORT_LABEL)] : []
+      labelIds: schliesstUeberLabelEin_() ? [ermittleLabelId_(INCLUDED_EMAIL_LABEL)] : []
     });
   }
 
-  /** Unbekanntes Auswahlverfahren bricht den Lauf ab, statt still zu wirken. */
-  function assertAuswahl_(auswahl) {
-    const zulaessig = [AUSWAHL_LABEL, AUSWAHL_NUMMERNLISTE];
-    if (zulaessig.indexOf(auswahl) === -1) {
-      throw new Error('Unbekanntes Auswahlverfahren "' + auswahl + '" – zulässig: ' + zulaessig.join(', ') + '.');
+  /** Einschluss über das Label oder Ausschluss über die Nummern? */
+  function schliesstUeberLabelEin_() {
+    return SOURCE_FILTERED_BY === SOURCE_FILTER_INCLUDING_EMAIL_LABEL;
+  }
+
+  /** Ein unbekannter Quellfilter bricht den Lauf ab, statt still zu wirken. */
+  function assertQuellfilterZulaessig_(quellfilter) {
+    const zulaessig = [SOURCE_FILTER_INCLUDING_EMAIL_LABEL, SOURCE_FILTER_EXCLUDING_FAX_NUMBERS];
+    if (zulaessig.indexOf(quellfilter) === -1) {
+      throw new Error('Unbekannter Quellfilter "' + quellfilter + '" – zulässig: ' + zulaessig.join(', ') + '.');
+    }
+  }
+
+  /**
+   * Die Protokolldatei führt den Quellfilter mit. Findet ein fortgesetzter
+   * Lauf dort einen anderen, bricht er ab: Die hinterlegte ID-Liste stammt
+   * dann vom anderen Verfahren und hätte den falschen Bestand abgearbeitet.
+   */
+  function assertQuellfilterUnveraendert_(protokoll) {
+    if (protokoll.sourceFilteredBy !== SOURCE_FILTERED_BY) {
+      throw new Error('Zwischenstand stammt vom Quellfilter "' + protokoll.sourceFilteredBy +
+        '", eingestellt ist "' + SOURCE_FILTERED_BY + '" – Abbruch.');
     }
   }
 
@@ -344,6 +377,7 @@ const FaxVersandExtraktor = (function () {
     const protokoll = loadProtokoll_(config.exportName);
 
     if (protokoll) {
+      assertQuellfilterUnveraendert_(protokoll);
       return resumeSession_(protokoll);
     }
 
@@ -391,6 +425,7 @@ const FaxVersandExtraktor = (function () {
     const protokoll = {
       archiveName: archiveName,
       exportName: config.exportName,
+      sourceFilteredBy: SOURCE_FILTERED_BY,
       ids: allIds,
       nextIndex: 0,
       nextPart: 1,
@@ -434,15 +469,17 @@ const FaxVersandExtraktor = (function () {
    * welches Verfahren es erzeugt hat. Eine Quelle für beide Ausgaben.
    */
   function beschreibeEinstellungen_() {
-    const kennzeichen = function (auswahl) {
-      return AUSWAHL === auswahl ? ' [WIRKSAM]' : ' [ruht]';
+    const kennzeichen = function (quellfilter) {
+      return SOURCE_FILTERED_BY === quellfilter ? ' [WIRKSAM]' : ' [ruht]';
     };
 
     return [
-      'Auswahlverfahren: ' + AUSWAHL,
-      'Label (' + AUSWAHL_LABEL + ')' + kennzeichen(AUSWAHL_LABEL) + ': ' + EXPORT_LABEL,
-      'Nummernliste (' + AUSWAHL_NUMMERNLISTE + ')' + kennzeichen(AUSWAHL_NUMMERNLISTE) + ': ' +
-        FAX_NSN_LISTE.length + ' Nummern, ' + EXCLUDED_RECIPIENTS.length + ' Adressen',
+      'Quellfilter: ' + SOURCE_FILTERED_BY,
+      'Einschluss über E-Mail-Label (' + SOURCE_FILTER_INCLUDING_EMAIL_LABEL + ')' +
+        kennzeichen(SOURCE_FILTER_INCLUDING_EMAIL_LABEL) + ': ' + INCLUDED_EMAIL_LABEL,
+      'Ausschluss über Fax-Nummern (' + SOURCE_FILTER_EXCLUDING_FAX_NUMBERS + ')' +
+        kennzeichen(SOURCE_FILTER_EXCLUDING_FAX_NUMBERS) + ': ' +
+        EXCLUDED_FAX_NSN.length + ' Nummern, ' + EXCLUDED_RECIPIENTS.length + ' Adressen',
       '  ' + EXCLUDED_RECIPIENTS.join(', ')
     ];
   }
@@ -607,10 +644,10 @@ const FaxVersandExtraktor = (function () {
       return 'Empfänger außerhalb ' + FAX_DOMAIN + ': ' + fremde.join(', ');
     }
 
-    // Nur das Ausschlussverfahren wertet die Nummernliste aus. Im
-    // Einschlussverfahren entscheidet allein das Label, das die Gmail-API
-    // bereits exakt gefiltert hat.
-    if (AUSWAHL === AUSWAHL_NUMMERNLISTE) {
+    // Nur das Ausschlussverfahren wertet die Fax-Nummern aus. Beim
+    // Einschluss entscheidet allein das Label, das die Gmail-API bereits
+    // exakt gefiltert hat.
+    if (!schliesstUeberLabelEin_()) {
       const gesperrte = empfaenger.filter(function (adresse) { return istAusgenommeneNummer_(adresse); });
       if (gesperrte.length > 0) {
         return 'ausgenommene Zielnummer: ' + gesperrte.join(', ');
@@ -670,8 +707,7 @@ const FaxVersandExtraktor = (function () {
     const readme = buildReadme_(config, anzahlDisplay, session.partNumber, pdfCount, skipped);
     blobs.push(Utilities.newBlob(readme, 'text/plain', buildReadmeName_(session.partNumber)));
 
-    const zipName = session.archiveName + '_teil_' + session.partNumber;
-    const zip = Utilities.zip(blobs, zipName + '.zip');
+    const zip = Utilities.zip(blobs, teilArchivName_(session.archiveName, session.partNumber));
 
     const fileMetadata = {
       name: zip.getName(),
@@ -687,11 +723,26 @@ const FaxVersandExtraktor = (function () {
   /**
    * Der Index des Teils gehört in die Dateierweiterung, damit die READMEs
    * mehrerer Teile nebeneinander liegen können, ohne einander zu verdrängen.
-   * Zweistellig mit Vornull; ab Teil 100 wächst die Stellenzahl.
    */
   function buildReadmeName_(partNumber) {
-    const index = String(partNumber);
-    return 'README.' + (index.length < 2 ? '0' + index : index) + '.txt';
+    return 'README.' + teilIndex_(partNumber) + '.txt';
+  }
+
+  /**
+   * Zweistellig mit Vornull. Ab Teil 100 bricht der Lauf ab, statt den
+   * Index wachsen zu lassen: Eine dritte Stelle stellte README.100.txt in
+   * jeder alphabetischen Liste vor README.11.txt.
+   */
+  function teilIndex_(partNumber) {
+    if (partNumber > 99) {
+      throw new Error('Teil ' + partNumber + ' überschreitet den zweistelligen Index – Abbruch.');
+    }
+    return partNumber < 10 ? '0' + partNumber : String(partNumber);
+  }
+
+  /** Eine Quelle für den ZIP-Namen; Protokolleintrag und Ablage dürfen nicht auseinanderlaufen. */
+  function teilArchivName_(archiveName, partNumber) {
+    return archiveName + '.' + teilIndex_(partNumber) + '.zip';
   }
 
   function buildReadme_(config, anzahlDisplay, partNumber, pdfCount, skipped) {
@@ -724,7 +775,7 @@ const FaxVersandExtraktor = (function () {
         exportiert: result.blobs.length,
         uebersprungen: result.skipped,
         bytes: result.totalBytes,
-        zipName: session.archiveName + '_teil_' + session.partNumber + '.zip'
+        zipName: teilArchivName_(session.archiveName, session.partNumber)
       });
     }
 
@@ -819,12 +870,14 @@ const FaxVersandExtraktor = (function () {
     const ids = [];
     let pageToken = null;
     do {
-      const response = Gmail.Users.Messages.list('me', {
-        q: query,
-        labelIds: (labelIds && labelIds.length > 0) ? labelIds : undefined,
-        maxResults: 100,
-        pageToken: pageToken
-      });
+      // labelIds wird nur gesetzt, wenn es Kennungen gibt. Ob die Gmail-API
+      // einen undefined-Wert wie ein fehlendes Feld behandelt, ist unbelegt.
+      const optionen = { q: query, maxResults: 100, pageToken: pageToken };
+      if (labelIds && labelIds.length > 0) {
+        optionen.labelIds = labelIds;
+      }
+
+      const response = Gmail.Users.Messages.list('me', optionen);
       if (!response.messages) break;
       for (const m of response.messages) {
         ids.push(m.id);
