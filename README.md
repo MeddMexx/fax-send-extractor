@@ -17,6 +17,7 @@ nicht. Die Geschwisterfassung ist nicht Teil dieses Repositorys.
 ## Aufbau
 
     src/Fax-Versand-Extractor.gs    das gesamte Skript
+    test/pruefstand.js              Prüfstand, siehe unten
 
 Eine `appsscript.json` liegt bewusst nicht bei: Der Inhalt der tatsächlich
 verwendeten Manifestdatei (Zeitzone, Laufzeitversion, Dienstversionen,
@@ -107,10 +108,21 @@ Ein vollständiger Lauf ist am 3. Oktober 2026 durchgelaufen. Die Trefferzahl
 des Skripts stimmte mit derselben Suche in der Gmail-Oberfläche überein
 (867 Treffer).
 
-Automatisierte Tests sind nicht Teil des Repositorys. Der Quellfilter wurde
-vor der Auslieferung auf einem Prüfstand außerhalb gefahren: Attrappen für
-Gmail, Drive, Utilities und Session, vollständige Läufe in beiden Verfahren,
-fehlendes Label, fremder Zwischenstand, Indexgrenze, Empfängerzerlegung.
+### Prüfstand
+
+    node test/pruefstand.js
+
+Rücksprung 0 ohne Beanstandung, sonst 1. Geprüft werden vollständige Läufe in
+beiden Verfahren, das fehlende Label, ein Zwischenstand aus dem anderen
+Verfahren, die Indexgrenze und die Empfängerzerlegung.
+
+Zwei Einschränkungen gehören dazu. Gmail, Drive, Utilities und Session sind
+nachgebaut; die Attrappen bilden ab, was das Skript erwartet, und sagen nichts
+darüber, wie die echten Dienste sich verhalten. Und der Prüfstand erweitert
+den Rückgabewert des Namensraums im geladenen Quelltext, um an die gekapselten
+Funktionen zu kommen — in der Kopie, nie in der Datei; findet er seinen
+Ankerpunkt nicht, bricht er ab.
+
 Gegen das echte Postfach ist der Quellfilter noch nicht gelaufen.
 
 ## Offene Punkte

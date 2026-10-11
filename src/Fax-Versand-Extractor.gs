@@ -214,7 +214,7 @@ const FaxVersandExtraktor = (function () {
     ];
   }
 
-  // Die ausgenommenen Empfängeradressen – einzige Quelle für die Ausschlussprüfung.
+  // Die ausgeschlossenen Empfängeradressen – einzige Quelle für die Ausschlussprüfung.
   const EXCLUDED_RECIPIENTS = EXCLUDED_FAX_NSN.reduce(function (adressen, nsn) {
     return adressen.concat(kodierungen_(nsn).map(function (kodierung) {
       return (kodierung + '@' + FAX_DOMAIN).toLowerCase();
@@ -648,9 +648,9 @@ const FaxVersandExtraktor = (function () {
     // Einschluss entscheidet allein das Label, das die Gmail-API bereits
     // exakt gefiltert hat.
     if (!schliesstUeberLabelEin_()) {
-      const gesperrte = empfaenger.filter(function (adresse) { return istAusgenommeneNummer_(adresse); });
+      const gesperrte = empfaenger.filter(function (adresse) { return istAusgeschlosseneFaxNummer_(adresse); });
       if (gesperrte.length > 0) {
-        return 'ausgenommene Zielnummer: ' + gesperrte.join(', ');
+        return 'ausgeschlossene Fax-Nummer: ' + gesperrte.join(', ');
       }
     }
 
@@ -682,7 +682,7 @@ const FaxVersandExtraktor = (function () {
     return adresse.endsWith('@' + FAX_DOMAIN.toLowerCase());
   }
 
-  function istAusgenommeneNummer_(adresse) {
+  function istAusgeschlosseneFaxNummer_(adresse) {
     return EXCLUDED_RECIPIENTS.indexOf(adresse) !== -1;
   }
 
