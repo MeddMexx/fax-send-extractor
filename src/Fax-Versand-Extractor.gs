@@ -138,7 +138,25 @@ const FaxVersandExtraktor = (function () {
   // können nicht auseinanderlaufen. Alle Nummern teilen FAX_CC.
   const FAX_CC = '49';                 // Länderkennzahl
   const FAX_NSN_LISTE = [              // nationale Nummern ohne Verkehrsausscheidungsziffer
-    '23021844955'
+    '23021844955',
+    '70717573190',
+    '75412048809',
+    '71126331177',
+    '7472169561',
+    '7612188505',
+    '761200572',
+    '7541300050',
+    '7112153340',
+    '74721692309',
+    '7112063142540',
+    '7112063148109',
+    '35131563109',
+    '7541374810',
+    '75413019680',
+    '75412045364',
+    '754122113',
+    '75313618988',
+    '7513524020'
   ];
 
   /** Die drei Kodierungen einer nationalen Nummer. */
