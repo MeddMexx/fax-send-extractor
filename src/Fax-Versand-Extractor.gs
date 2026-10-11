@@ -186,9 +186,7 @@ const FaxVersandExtraktor = (function () {
     '75412045364',
     '754122113',
     '75313618988',
-    '7513524020',
-    '7542519129',
-    '7542519128'
+    '7513524020'
   ];
 
   /** Die drei Kodierungen einer nationalen Nummer. */
